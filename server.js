@@ -1,4 +1,4 @@
-// ==================== monitor-bot.js (Bot 1: Monitors Servers) ====================
+// ==================== Unified Bot with Self-Ping ====================
 const { Client } = require("discord.js-selfbot-v13");
 const express = require("express");
 const fs = require("fs").promises;
@@ -14,229 +14,30 @@ const colors = {
   bright: "\x1b[1m",
 };
 
-class MonitorBot {
-  constructor(config) {
-    this.token = config.token;
-    this.senderBotUrl = config.senderBotUrl;
-    this.port = config.port;
-    this.botName = config.botName || "Monitor Bot";
-    this.dataFile = path.join(
+class UnifiedBot {
+  constructor() {
+    this.monitorToken = process.env.MONITOR_TOKEN;
+    this.senderToken = process.env.SENDER_TOKEN;
+    this.targetUserId = process.env.TARGET_USER_ID || "1407682357611204671";
+    this.port = process.env.PORT || 3000;
+    this.renderUrl = process.env.RENDER_EXTERNAL_URL; // Render provides this automatically
+
+    this.monitorClient = new Client();
+    this.senderClient = new Client();
+
+    this.monitorServers = new Set();
+    this.senderServers = new Set();
+
+    this.monitorDataFile = path.join(
       __dirname,
-      `monitored_servers_${this.botName}.json`
+      "monitored_servers_monitor.json"
     );
-    this.monitoredServers = new Set();
-    this.client = new Client();
+    this.senderDataFile = path.join(__dirname, "monitored_servers_sender.json");
+
     this.app = express();
+    this.pingInterval = null;
 
     this.setupExpress();
-    this.setupEventHandlers();
-  }
-
-  setupExpress() {
-    this.app.get("/", (req, res) => {
-      res.json({
-        status: `${this.botName} is running`,
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        botReady: this.client.isReady(),
-        monitoredServers: this.monitoredServers.size,
-      });
-    });
-
-    this.app.listen(this.port, () => {
-      console.log(`[${this.botName}] Web server running on port ${this.port}`);
-    });
-  }
-
-  async loadMonitoredServers() {
-    try {
-      const data = await fs.readFile(this.dataFile, "utf8");
-      const servers = JSON.parse(data);
-      this.monitoredServers = new Set(servers);
-      console.log(
-        `[${this.botName}] ✅ Loaded ${this.monitoredServers.size} monitored servers`
-      );
-      return true;
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        this.monitoredServers = new Set();
-        await this.saveMonitoredServers();
-        console.log(`[${this.botName}] 📝 Created new monitored servers file`);
-        return true;
-      } else {
-        console.error(
-          `[${this.botName}] ❌ Error loading monitored servers:`,
-          error
-        );
-        return false;
-      }
-    }
-  }
-
-  async saveMonitoredServers() {
-    try {
-      const serversArray = Array.from(this.monitoredServers);
-      await fs.writeFile(this.dataFile, JSON.stringify(serversArray, null, 2));
-      console.log(
-        `[${this.botName}] 💾 Saved ${serversArray.length} monitored servers`
-      );
-    } catch (error) {
-      console.error(
-        `[${this.botName}] ❌ Error saving monitored servers:`,
-        error
-      );
-    }
-  }
-
-  async addAllServersToMonitoring() {
-    console.log(`[${this.botName}] 🔍 Adding all servers to monitoring...`);
-    console.log(
-      `[${this.botName}] 📊 Total servers: ${this.client.guilds.cache.size}`
-    );
-
-    if (this.client.guilds.cache.size === 0) {
-      console.log(`[${this.botName}] ⚠️ WARNING: No guilds found in cache!`);
-      return;
-    }
-
-    this.monitoredServers.clear();
-
-    let processedCount = 0;
-    for (const [guildId, guild] of this.client.guilds.cache) {
-      console.log(
-        `[${this.botName}] Processing ${++processedCount}/${
-          this.client.guilds.cache.size
-        }: ${guild.name}`
-      );
-      this.monitoredServers.add(guild.id);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-
-    await this.saveMonitoredServers();
-    console.log(
-      `[${this.botName}] 🎯 Setup complete! Monitoring ${this.monitoredServers.size} servers`
-    );
-  }
-
-  async notifySenderBot(memberData) {
-    try {
-      await axios.post(`${this.senderBotUrl}/send-notification`, memberData, {
-        timeout: 5000,
-        headers: { "Content-Type": "application/json" },
-      });
-      console.log(`[${this.botName}] ✅ Sent notification to Sender Bot`);
-      return true;
-    } catch (error) {
-      console.error(
-        `[${this.botName}] ❌ Failed to notify Sender Bot:`,
-        error.message
-      );
-      return false;
-    }
-  }
-
-  setupEventHandlers() {
-    this.client.on("ready", async () => {
-      console.log("=".repeat(50));
-      console.log(
-        `[${this.botName}] ${colors.green}✅ Bot logged in!${colors.reset}`
-      );
-      console.log(
-        `[${this.botName}] ${colors.green}👤 ${this.client.user.username}${colors.reset}`
-      );
-      console.log(
-        `[${this.botName}] ${colors.cyan}🔗 Sender Bot URL: ${this.senderBotUrl}${colors.reset}`
-      );
-      console.log("=".repeat(50));
-
-      await this.loadMonitoredServers();
-      console.log(`[${this.botName}] ⏳ Waiting 5 seconds for cache...`);
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      await this.addAllServersToMonitoring();
-      console.log(`[${this.botName}] ✅ Bot fully operational!`);
-    });
-
-    this.client.on("error", (error) => {
-      console.error(`[${this.botName}] ❌ Error:`, error);
-    });
-
-    this.client.on("guildMemberAdd", async (member) => {
-      if (!this.monitoredServers.has(member.guild.id)) return;
-
-      const now = new Date();
-      const date = now.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      const time = now.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-
-      const memberData = {
-        username: member.user.username,
-        userId: member.user.id,
-        guildName: member.guild.name,
-        guildId: member.guild.id,
-        date: date,
-        time: time,
-        timestamp: now.toISOString(),
-        source: this.botName,
-      };
-
-      console.log(
-        `[${this.botName}] 🆕 New member detected: ${member.user.username} in ${member.guild.name}`
-      );
-      await this.notifySenderBot(memberData);
-    });
-
-    this.client.on("guildCreate", async (guild) => {
-      console.log(`[${this.botName}] Joined: ${guild.name}`);
-      this.monitoredServers.add(guild.id);
-      await this.saveMonitoredServers();
-    });
-
-    this.client.on("guildDelete", async (guild) => {
-      if (this.monitoredServers.has(guild.id)) {
-        this.monitoredServers.delete(guild.id);
-        await this.saveMonitoredServers();
-        console.log(`[${this.botName}] Left: ${guild.name}`);
-      }
-    });
-  }
-
-  async start() {
-    console.log(`[${this.botName}] 🚀 Attempting to log in...`);
-    try {
-      await this.client.login(this.token);
-    } catch (error) {
-      console.error(`[${this.botName}] ❌ FATAL: Login failed:`, error);
-      throw error;
-    }
-  }
-}
-
-// ==================== sender-bot.js (Bot 2: Sends DMs + Monitors Own Servers) ====================
-
-class SenderBot {
-  constructor(config) {
-    this.token = config.token;
-    this.targetUserId = config.targetUserId;
-    this.port = config.port;
-    this.botName = config.botName || "Sender Bot";
-    this.dataFile = path.join(
-      __dirname,
-      `monitored_servers_${this.botName}.json`
-    );
-    this.monitoredServers = new Set();
-    this.client = new Client();
-    this.app = express();
-    this.pendingNotifications = [];
-
-    this.setupExpress();
-    this.setupEventHandlers();
   }
 
   setupExpress() {
@@ -244,279 +45,361 @@ class SenderBot {
 
     this.app.get("/", (req, res) => {
       res.json({
-        status: `${this.botName} is running`,
+        status: "Unified Discord Bot is running",
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        botReady: this.client.isReady(),
-        pendingNotifications: this.pendingNotifications.length,
-        monitoredServers: this.monitoredServers.size,
+        monitorBot: {
+          ready: this.monitorClient.isReady(),
+          username: this.monitorClient.user?.username,
+          servers: this.monitorServers.size,
+        },
+        senderBot: {
+          ready: this.senderClient.isReady(),
+          username: this.senderClient.user?.username,
+          servers: this.senderServers.size,
+        },
       });
     });
 
-    // Endpoint to receive notifications from Monitor Bot
-    this.app.post("/send-notification", async (req, res) => {
-      const memberData = req.body;
-      console.log(
-        `[${this.botName}] 📬 Received notification from ${
-          memberData.source || "Monitor Bot"
-        }: ${memberData.username}`
-      );
-
-      if (!this.client.isReady()) {
-        this.pendingNotifications.push(memberData);
-        console.log(`[${this.botName}] ⏳ Bot not ready, queued notification`);
-        return res.json({
-          status: "queued",
-          message: "Bot not ready, notification queued",
-        });
-      }
-
-      const result = await this.sendNotification(memberData);
-      res.json(result);
+    this.app.get("/health", (req, res) => {
+      res.json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+      });
     });
 
     this.app.listen(this.port, () => {
-      console.log(`[${this.botName}] Web server running on port ${this.port}`);
+      console.log(`[UNIFIED BOT] 🌐 Web server running on port ${this.port}`);
     });
+  }
+
+  // Self-ping to keep Render service alive
+  startSelfPing() {
+    const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes (safer than 15)
+
+    // Use Render's external URL or fallback
+    const pingUrl = this.renderUrl || `http://localhost:${this.port}`;
+
+    this.pingInterval = setInterval(async () => {
+      try {
+        const response = await axios.get(`${pingUrl}/health`, {
+          timeout: 10000,
+        });
+        console.log(
+          `[UNIFIED BOT] 🏓 Self-ping successful at ${new Date().toLocaleTimeString()}`
+        );
+      } catch (error) {
+        console.error(`[UNIFIED BOT] ⚠️ Self-ping failed:`, error.message);
+      }
+    }, PING_INTERVAL);
+
+    console.log(
+      `[UNIFIED BOT] ⏰ Self-ping enabled (every 14 minutes to ${pingUrl})`
+    );
   }
 
   async loadMonitoredServers() {
     try {
-      const data = await fs.readFile(this.dataFile, "utf8");
-      const servers = JSON.parse(data);
-      this.monitoredServers = new Set(servers);
+      // Load Monitor bot servers
+      const monitorData = await fs.readFile(this.monitorDataFile, "utf8");
+      this.monitorServers = new Set(JSON.parse(monitorData));
       console.log(
-        `[${this.botName}] ✅ Loaded ${this.monitoredServers.size} monitored servers`
+        `[MONITOR] ✅ Loaded ${this.monitorServers.size} monitored servers`
       );
-      return true;
     } catch (error) {
       if (error.code === "ENOENT") {
-        this.monitoredServers = new Set();
+        this.monitorServers = new Set();
         await this.saveMonitoredServers();
-        console.log(`[${this.botName}] 📝 Created new monitored servers file`);
-        return true;
+        console.log(`[MONITOR] 📝 Created new monitored servers file`);
       } else {
-        console.error(
-          `[${this.botName}] ❌ Error loading monitored servers:`,
-          error
-        );
-        return false;
+        console.error(`[MONITOR] ❌ Error loading servers:`, error);
+      }
+    }
+
+    try {
+      // Load Sender bot servers
+      const senderData = await fs.readFile(this.senderDataFile, "utf8");
+      this.senderServers = new Set(JSON.parse(senderData));
+      console.log(
+        `[SENDER] ✅ Loaded ${this.senderServers.size} monitored servers`
+      );
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        this.senderServers = new Set();
+        await this.saveSenderServers();
+        console.log(`[SENDER] 📝 Created new monitored servers file`);
+      } else {
+        console.error(`[SENDER] ❌ Error loading servers:`, error);
       }
     }
   }
 
   async saveMonitoredServers() {
     try {
-      const serversArray = Array.from(this.monitoredServers);
-      await fs.writeFile(this.dataFile, JSON.stringify(serversArray, null, 2));
-      console.log(
-        `[${this.botName}] 💾 Saved ${serversArray.length} monitored servers`
+      const serversArray = Array.from(this.monitorServers);
+      await fs.writeFile(
+        this.monitorDataFile,
+        JSON.stringify(serversArray, null, 2)
       );
     } catch (error) {
-      console.error(
-        `[${this.botName}] ❌ Error saving monitored servers:`,
-        error
+      console.error(`[MONITOR] ❌ Error saving servers:`, error);
+    }
+  }
+
+  async saveSenderServers() {
+    try {
+      const serversArray = Array.from(this.senderServers);
+      await fs.writeFile(
+        this.senderDataFile,
+        JSON.stringify(serversArray, null, 2)
       );
+    } catch (error) {
+      console.error(`[SENDER] ❌ Error saving servers:`, error);
     }
   }
 
   async addAllServersToMonitoring() {
-    console.log(`[${this.botName}] 🔍 Adding all servers to monitoring...`);
-    console.log(
-      `[${this.botName}] 📊 Total servers: ${this.client.guilds.cache.size}`
-    );
-
-    if (this.client.guilds.cache.size === 0) {
-      console.log(`[${this.botName}] ⚠️ WARNING: No guilds found in cache!`);
-      return;
-    }
-
-    this.monitoredServers.clear();
-
-    let processedCount = 0;
-    for (const [guildId, guild] of this.client.guilds.cache) {
+    // Add Monitor bot servers
+    console.log(`[MONITOR] 🔍 Adding all servers to monitoring...`);
+    if (this.monitorClient.guilds.cache.size > 0) {
+      this.monitorServers.clear();
+      let count = 0;
+      for (const [guildId, guild] of this.monitorClient.guilds.cache) {
+        this.monitorServers.add(guild.id);
+        console.log(`[MONITOR] Processing ${++count}: ${guild.name}`);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      await this.saveMonitoredServers();
       console.log(
-        `[${this.botName}] Processing ${++processedCount}/${
-          this.client.guilds.cache.size
-        }: ${guild.name}`
+        `[MONITOR] 🎯 Monitoring ${this.monitorServers.size} servers`
       );
-      this.monitoredServers.add(guild.id);
-      await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
-    await this.saveMonitoredServers();
-    console.log(
-      `[${this.botName}] 🎯 Setup complete! Monitoring ${this.monitoredServers.size} servers`
-    );
+    // Add Sender bot servers
+    console.log(`[SENDER] 🔍 Adding all servers to monitoring...`);
+    if (this.senderClient.guilds.cache.size > 0) {
+      this.senderServers.clear();
+      let count = 0;
+      for (const [guildId, guild] of this.senderClient.guilds.cache) {
+        this.senderServers.add(guild.id);
+        console.log(`[SENDER] Processing ${++count}: ${guild.name}`);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      await this.saveSenderServers();
+      console.log(`[SENDER] 🎯 Monitoring ${this.senderServers.size} servers`);
+    }
   }
 
   async sendNotification(memberData) {
     try {
-      const targetUser = await this.client.users.fetch(this.targetUserId);
+      const targetUser = await this.senderClient.users.fetch(this.targetUserId);
       const source = memberData.source || "Monitor Bot";
       const message = `🎉 **New Member Alert!** [${source}]\n📆 ${memberData.date}\n🕐 ${memberData.time}\n👤 \`${memberData.username}\`\n🆔 \`${memberData.userId}\`\n🏠 ${memberData.guildName}`;
 
       await targetUser.send(message);
 
       console.log(
-        `[${this.botName}] ✅ Sent DM to ${targetUser.username} for: ${memberData.username} from ${memberData.guildName} (Source: ${source})`
+        `[SENDER] ✅ Sent DM to ${targetUser.username} for: ${memberData.username} from ${memberData.guildName}`
       );
-      return { status: "success", message: "Notification sent" };
+      return true;
     } catch (err) {
-      console.error(`[${this.botName}] ❌ Failed to send DM:`, err);
-      return { status: "error", message: err.message };
+      console.error(`[SENDER] ❌ Failed to send DM:`, err);
+      return false;
     }
   }
 
-  async processPendingNotifications() {
-    if (this.pendingNotifications.length === 0) return;
-
-    console.log(
-      `[${this.botName}] 📤 Processing ${this.pendingNotifications.length} pending notifications...`
-    );
-
-    while (this.pendingNotifications.length > 0) {
-      const notification = this.pendingNotifications.shift();
-      await this.sendNotification(notification);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  }
-
-  setupEventHandlers() {
-    this.client.on("ready", async () => {
+  setupMonitorBotHandlers() {
+    this.monitorClient.on("ready", async () => {
       console.log("=".repeat(50));
+      console.log(`[MONITOR] ${colors.green}✅ Bot logged in!${colors.reset}`);
       console.log(
-        `[${this.botName}] ${colors.green}✅ Bot logged in!${colors.reset}`
-      );
-      console.log(
-        `[${this.botName}] ${colors.green}👤 ${this.client.user.username}${colors.reset}`
-      );
-      console.log(
-        `[${this.botName}] ${colors.cyan}🎯 Target User ID: ${this.targetUserId}${colors.reset}`
+        `[MONITOR] ${colors.green}👤 ${this.monitorClient.user.username}${colors.reset}`
       );
       console.log("=".repeat(50));
-
-      await this.loadMonitoredServers();
-      console.log(`[${this.botName}] ⏳ Waiting 5 seconds for cache...`);
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      await this.addAllServersToMonitoring();
-      console.log(
-        `[${this.botName}] ✅ Ready to send DM notifications and monitor servers!`
-      );
-
-      await this.processPendingNotifications();
     });
 
-    this.client.on("error", (error) => {
-      console.error(`[${this.botName}] ❌ Error:`, error);
+    this.monitorClient.on("error", (error) => {
+      console.error(`[MONITOR] ❌ Error:`, error);
     });
 
-    // Monitor for new members in Sender Bot's own servers
-    this.client.on("guildMemberAdd", async (member) => {
-      if (!this.monitoredServers.has(member.guild.id)) return;
+    this.monitorClient.on("guildMemberAdd", async (member) => {
+      if (!this.monitorServers.has(member.guild.id)) return;
 
       const now = new Date();
-      const date = now.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      const time = now.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-
       const memberData = {
         username: member.user.username,
         userId: member.user.id,
         guildName: member.guild.name,
         guildId: member.guild.id,
-        date: date,
-        time: time,
+        date: now.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        time: now.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
         timestamp: now.toISOString(),
-        source: this.botName,
+        source: "Monitor Bot",
       };
 
       console.log(
-        `[${this.botName}] 🆕 New member detected in own server: ${member.user.username} in ${member.guild.name}`
+        `[MONITOR] 🆕 New member: ${member.user.username} in ${member.guild.name}`
       );
       await this.sendNotification(memberData);
     });
 
-    this.client.on("guildCreate", async (guild) => {
-      console.log(`[${this.botName}] Joined: ${guild.name}`);
-      this.monitoredServers.add(guild.id);
+    this.monitorClient.on("guildCreate", async (guild) => {
+      console.log(`[MONITOR] Joined: ${guild.name}`);
+      this.monitorServers.add(guild.id);
       await this.saveMonitoredServers();
     });
 
-    this.client.on("guildDelete", async (guild) => {
-      if (this.monitoredServers.has(guild.id)) {
-        this.monitoredServers.delete(guild.id);
+    this.monitorClient.on("guildDelete", async (guild) => {
+      if (this.monitorServers.has(guild.id)) {
+        this.monitorServers.delete(guild.id);
         await this.saveMonitoredServers();
-        console.log(`[${this.botName}] Left: ${guild.name}`);
+        console.log(`[MONITOR] Left: ${guild.name}`);
+      }
+    });
+  }
+
+  setupSenderBotHandlers() {
+    this.senderClient.on("ready", async () => {
+      console.log("=".repeat(50));
+      console.log(`[SENDER] ${colors.green}✅ Bot logged in!${colors.reset}`);
+      console.log(
+        `[SENDER] ${colors.green}👤 ${this.senderClient.user.username}${colors.reset}`
+      );
+      console.log(
+        `[SENDER] ${colors.cyan}🎯 Target User ID: ${this.targetUserId}${colors.reset}`
+      );
+      console.log("=".repeat(50));
+    });
+
+    this.senderClient.on("error", (error) => {
+      console.error(`[SENDER] ❌ Error:`, error);
+    });
+
+    this.senderClient.on("guildMemberAdd", async (member) => {
+      if (!this.senderServers.has(member.guild.id)) return;
+
+      const now = new Date();
+      const memberData = {
+        username: member.user.username,
+        userId: member.user.id,
+        guildName: member.guild.name,
+        guildId: member.guild.id,
+        date: now.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        time: now.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        timestamp: now.toISOString(),
+        source: "Sender Bot",
+      };
+
+      console.log(
+        `[SENDER] 🆕 New member in own server: ${member.user.username} in ${member.guild.name}`
+      );
+      await this.sendNotification(memberData);
+    });
+
+    this.senderClient.on("guildCreate", async (guild) => {
+      console.log(`[SENDER] Joined: ${guild.name}`);
+      this.senderServers.add(guild.id);
+      await this.saveSenderServers();
+    });
+
+    this.senderClient.on("guildDelete", async (guild) => {
+      if (this.senderServers.has(guild.id)) {
+        this.senderServers.delete(guild.id);
+        await this.saveSenderServers();
+        console.log(`[SENDER] Left: ${guild.name}`);
       }
     });
   }
 
   async start() {
-    console.log(`[${this.botName}] 🚀 Attempting to log in...`);
+    console.log("🚀 Starting Unified Bot System...\n");
+
+    // Setup event handlers
+    this.setupMonitorBotHandlers();
+    this.setupSenderBotHandlers();
+
+    // Login both bots
     try {
-      await this.client.login(this.token);
+      console.log("[SENDER] 🔐 Logging in Sender Bot...");
+      await this.senderClient.login(this.senderToken);
+      console.log("[SENDER] ✅ Logged in successfully!");
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      console.log("[MONITOR] 🔐 Logging in Monitor Bot...");
+      await this.monitorClient.login(this.monitorToken);
+      console.log("[MONITOR] ✅ Logged in successfully!");
+
+      // Wait for caches to populate
+      console.log("⏳ Waiting for guild caches to populate...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Load and setup servers
+      await this.loadMonitoredServers();
+      await this.addAllServersToMonitoring();
+
+      // Start self-ping
+      this.startSelfPing();
+
+      console.log("\n" + "=".repeat(50));
+      console.log("✅ UNIFIED BOT SYSTEM FULLY OPERATIONAL!");
+      console.log("=".repeat(50));
+      console.log(`📊 Monitor Bot: ${this.monitorServers.size} servers`);
+      console.log(`📊 Sender Bot: ${this.senderServers.size} servers`);
+      console.log(`🎯 Target User ID: ${this.targetUserId}`);
+      console.log(`🌐 Web Interface: http://localhost:${this.port}`);
+      console.log("=".repeat(50));
     } catch (error) {
-      console.error(`[${this.botName}] ❌ FATAL: Login failed:`, error);
+      console.error("❌ FATAL: Failed to start bot:", error);
       throw error;
+    }
+  }
+
+  stop() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      console.log("[UNIFIED BOT] ⏹️ Self-ping stopped");
     }
   }
 }
 
-// ==================== index.js (Main Entry Point) ====================
-
+// ==================== Main Entry Point ====================
 async function main() {
-  // Configuration
-  const config = {
-    monitorBot: {
-      token: process.env.MONITOR_TOKEN,
-      senderBotUrl: "http://localhost:3007",
-      port: 3000,
-      botName: "Monitor",
-    },
-    senderBot: {
-      token: process.env.SENDER_TOKEN,
-      targetUserId: "1407682357611204671",
-      port: 3007,
-      botName: "Sender",
-    },
-  };
+  const bot = new UnifiedBot();
+  await bot.start();
 
-  console.log("🚀 Starting Two-Bot System with Dual Monitoring...\n");
+  // Graceful shutdown
+  process.on("SIGINT", () => {
+    console.log("\n🛑 Shutting down gracefully...");
+    bot.stop();
+    process.exit(0);
+  });
 
-  // Start Sender Bot first
-  const senderBot = new SenderBot(config.senderBot);
-  await senderBot.start();
-
-  // Wait for Sender Bot to fully initialize
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-
-  // Start Monitor Bot
-  const monitorBot = new MonitorBot(config.monitorBot);
-  await monitorBot.start();
-
-  console.log("\n✅ Both bots are now running!");
-  console.log(`📊 Monitor Bot: http://localhost:${config.monitorBot.port}`);
-  console.log(`📊 Sender Bot: http://localhost:${config.senderBot.port}`);
-  console.log("\n📋 Summary:");
-  console.log(`   • Monitor Bot monitors its servers and sends to Sender Bot`);
-  console.log(
-    `   • Sender Bot monitors its own servers AND receives from Monitor Bot`
-  );
-  console.log(
-    `   • All notifications are sent to User ID: ${config.senderBot.targetUserId}`
-  );
+  process.on("SIGTERM", () => {
+    console.log("\n🛑 Shutting down gracefully...");
+    bot.stop();
+    process.exit(0);
+  });
 }
 
-// Export classes for modular use
-module.exports = { MonitorBot, SenderBot };
+// Export for modular use
+module.exports = { UnifiedBot };
 
 // Run if this is the main module
 if (require.main === module) {
