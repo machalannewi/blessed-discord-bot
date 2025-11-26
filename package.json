@@ -1,30 +1,18 @@
 {
   "name": "discord-two-bot-monitor",
   "version": "1.0.0",
-  "description": "Two-bot system for monitoring Discord servers and sending DM notifications",
+  "description": "Two-bot system for monitoring Discord servers",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "monitor": "node monitor-bot.js",
-    "sender": "node sender-bot.js",
-    "dev": "nodemon index.js"
+    "start": "node server.js"
   },
-  "keywords": [
-    "discord",
-    "bot",
-    "selfbot",
-    "monitor",
-    "notifications"
-  ],
-  "author": "Your Name",
+  "keywords": ["discord", "bot", "monitor"],
+  "author": "",
   "license": "MIT",
   "dependencies": {
     "discord.js-selfbot-v13": "2.14.12",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.0.0",
     "express": "^4.18.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": "18.x"

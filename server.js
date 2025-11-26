@@ -1,9 +1,8 @@
-// ==================== Unified Bot with Self-Ping (Railway) ====================
+// ==================== Unified Bot for Railway ====================
 const { Client } = require("discord.js-selfbot-v13");
 const express = require("express");
 const fs = require("fs").promises;
 const path = require("path");
-const axios = require("axios");
 require("dotenv").config();
 
 const colors = {
@@ -21,18 +20,8 @@ class UnifiedBot {
     this.targetUserId = process.env.TARGET_USER_ID || "1407682357611204671";
     this.port = process.env.PORT || 3000;
 
-    // Railway provides PUBLIC_DOMAIN or RAILWAY_PUBLIC_DOMAIN
-    // Also supports custom RAILWAY_STATIC_URL for static deployments
-    this.railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : process.env.PUBLIC_DOMAIN
-      ? `https://${process.env.PUBLIC_DOMAIN}`
-      : process.env.RAILWAY_STATIC_URL
-      ? process.env.RAILWAY_STATIC_URL
-      : null;
-
-    this.monitorClient = new Client();
-    this.senderClient = new Client();
+    this.monitorClient = new Client({ checkUpdate: false });
+    this.senderClient = new Client({ checkUpdate: false });
 
     this.monitorServers = new Set();
     this.senderServers = new Set();
@@ -56,7 +45,6 @@ class UnifiedBot {
         status: "Unified Discord Bot is running",
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        environment: process.env.RAILWAY_ENVIRONMENT || "unknown",
         monitorBot: {
           ready: this.monitorClient.isReady(),
           username: this.monitorClient.user?.username,
@@ -80,11 +68,6 @@ class UnifiedBot {
 
     this.app.listen(this.port, "0.0.0.0", () => {
       console.log(`[UNIFIED BOT] 🌐 Web server running on port ${this.port}`);
-      console.log(
-        `[UNIFIED BOT] 🚂 Railway URL: ${
-          this.railwayUrl || "Not available (local mode)"
-        }`
-      );
     });
   }
 
@@ -350,18 +333,12 @@ class UnifiedBot {
       console.log(`📊 Monitor Bot: ${this.monitorServers.size} servers`);
       console.log(`📊 Sender Bot: ${this.senderServers.size} servers`);
       console.log(`🎯 Target User ID: ${this.targetUserId}`);
-      console.log(
-        `🚂 Railway Environment: ${process.env.RAILWAY_ENVIRONMENT || "local"}`
-      );
-      console.log(`🌐 Public URL: ${this.railwayUrl || "localhost"}`);
       console.log("=".repeat(50));
     } catch (error) {
       console.error("❌ FATAL: Failed to start bot:", error);
       throw error;
     }
   }
-
-  // Graceful shutdown handler
 }
 
 // ==================== Main Entry Point ====================
