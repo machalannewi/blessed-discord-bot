@@ -1,4 +1,4 @@
-// ==================== Unified Bot with Self-Ping ====================
+// ==================== Unified Bot with Self-Ping (Railway) ====================
 const { Client } = require("discord.js-selfbot-v13");
 const express = require("express");
 const fs = require("fs").promises;
@@ -20,7 +20,16 @@ class UnifiedBot {
     this.senderToken = process.env.SENDER_TOKEN;
     this.targetUserId = process.env.TARGET_USER_ID || "1407682357611204671";
     this.port = process.env.PORT || 3000;
-    this.renderUrl = process.env.RENDER_EXTERNAL_URL; // Render provides this automatically
+
+    // Railway provides PUBLIC_DOMAIN or RAILWAY_PUBLIC_DOMAIN
+    // Also supports custom RAILWAY_STATIC_URL for static deployments
+    this.railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : process.env.PUBLIC_DOMAIN
+      ? `https://${process.env.PUBLIC_DOMAIN}`
+      : process.env.RAILWAY_STATIC_URL
+      ? process.env.RAILWAY_STATIC_URL
+      : null;
 
     this.monitorClient = new Client();
     this.senderClient = new Client();
@@ -35,7 +44,6 @@ class UnifiedBot {
     this.senderDataFile = path.join(__dirname, "monitored_servers_sender.json");
 
     this.app = express();
-    this.pingInterval = null;
 
     this.setupExpress();
   }
@@ -48,6 +56,7 @@ class UnifiedBot {
         status: "Unified Discord Bot is running",
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
+        environment: process.env.RAILWAY_ENVIRONMENT || "unknown",
         monitorBot: {
           ready: this.monitorClient.isReady(),
           username: this.monitorClient.user?.username,
@@ -65,37 +74,18 @@ class UnifiedBot {
       res.json({
         status: "healthy",
         timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
       });
     });
 
-    this.app.listen(this.port, () => {
+    this.app.listen(this.port, "0.0.0.0", () => {
       console.log(`[UNIFIED BOT] 🌐 Web server running on port ${this.port}`);
+      console.log(
+        `[UNIFIED BOT] 🚂 Railway URL: ${
+          this.railwayUrl || "Not available (local mode)"
+        }`
+      );
     });
-  }
-
-  // Self-ping to keep Render service alive
-  startSelfPing() {
-    const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes (safer than 15)
-
-    // Use Render's external URL or fallback
-    const pingUrl = this.renderUrl || `http://localhost:${this.port}`;
-
-    this.pingInterval = setInterval(async () => {
-      try {
-        const response = await axios.get(`${pingUrl}/health`, {
-          timeout: 10000,
-        });
-        console.log(
-          `[UNIFIED BOT] 🏓 Self-ping successful at ${new Date().toLocaleTimeString()}`
-        );
-      } catch (error) {
-        console.error(`[UNIFIED BOT] ⚠️ Self-ping failed:`, error.message);
-      }
-    }, PING_INTERVAL);
-
-    console.log(
-      `[UNIFIED BOT] ⏰ Self-ping enabled (every 14 minutes to ${pingUrl})`
-    );
   }
 
   async loadMonitoredServers() {
@@ -328,7 +318,7 @@ class UnifiedBot {
   }
 
   async start() {
-    console.log("🚀 Starting Unified Bot System...\n");
+    console.log("🚀 Starting Unified Bot System on Railway...\n");
 
     // Setup event handlers
     this.setupMonitorBotHandlers();
@@ -354,16 +344,16 @@ class UnifiedBot {
       await this.loadMonitoredServers();
       await this.addAllServersToMonitoring();
 
-      // Start self-ping
-      this.startSelfPing();
-
       console.log("\n" + "=".repeat(50));
       console.log("✅ UNIFIED BOT SYSTEM FULLY OPERATIONAL!");
       console.log("=".repeat(50));
       console.log(`📊 Monitor Bot: ${this.monitorServers.size} servers`);
       console.log(`📊 Sender Bot: ${this.senderServers.size} servers`);
       console.log(`🎯 Target User ID: ${this.targetUserId}`);
-      console.log(`🌐 Web Interface: http://localhost:${this.port}`);
+      console.log(
+        `🚂 Railway Environment: ${process.env.RAILWAY_ENVIRONMENT || "local"}`
+      );
+      console.log(`🌐 Public URL: ${this.railwayUrl || "localhost"}`);
       console.log("=".repeat(50));
     } catch (error) {
       console.error("❌ FATAL: Failed to start bot:", error);
@@ -371,12 +361,7 @@ class UnifiedBot {
     }
   }
 
-  stop() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      console.log("[UNIFIED BOT] ⏹️ Self-ping stopped");
-    }
-  }
+  // Graceful shutdown handler
 }
 
 // ==================== Main Entry Point ====================
@@ -387,13 +372,11 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", () => {
     console.log("\n🛑 Shutting down gracefully...");
-    bot.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
     console.log("\n🛑 Shutting down gracefully...");
-    bot.stop();
     process.exit(0);
   });
 }
