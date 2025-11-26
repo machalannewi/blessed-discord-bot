@@ -1,5 +1,0 @@
-[build]
-builder = "NIXPACKS"
-
-[build.nixPkgs]
-packages = ["nodejs-18_x"]

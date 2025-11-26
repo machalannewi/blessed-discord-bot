@@ -1,8 +1,9 @@
-// ==================== Unified Bot for Railway ====================
+// ==================== Unified Bot with Self-Ping ====================
 const { Client } = require("discord.js-selfbot-v13");
 const express = require("express");
 const fs = require("fs").promises;
 const path = require("path");
+const axios = require("axios");
 require("dotenv").config();
 
 const colors = {
@@ -19,9 +20,10 @@ class UnifiedBot {
     this.senderToken = process.env.SENDER_TOKEN;
     this.targetUserId = process.env.TARGET_USER_ID || "1407682357611204671";
     this.port = process.env.PORT || 3000;
+    this.renderUrl = process.env.RENDER_EXTERNAL_URL; // Render provides this automatically
 
-    this.monitorClient = new Client({ checkUpdate: false });
-    this.senderClient = new Client({ checkUpdate: false });
+    this.monitorClient = new Client();
+    this.senderClient = new Client();
 
     this.monitorServers = new Set();
     this.senderServers = new Set();
@@ -33,6 +35,7 @@ class UnifiedBot {
     this.senderDataFile = path.join(__dirname, "monitored_servers_sender.json");
 
     this.app = express();
+    this.pingInterval = null;
 
     this.setupExpress();
   }
@@ -62,13 +65,37 @@ class UnifiedBot {
       res.json({
         status: "healthy",
         timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
       });
     });
 
-    this.app.listen(this.port, "0.0.0.0", () => {
+    this.app.listen(this.port, () => {
       console.log(`[UNIFIED BOT] 🌐 Web server running on port ${this.port}`);
     });
+  }
+
+  // Self-ping to keep Render service alive
+  startSelfPing() {
+    const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes (safer than 15)
+
+    // Use Render's external URL or fallback
+    const pingUrl = this.renderUrl || `http://localhost:${this.port}`;
+
+    this.pingInterval = setInterval(async () => {
+      try {
+        const response = await axios.get(`${pingUrl}/health`, {
+          timeout: 10000,
+        });
+        console.log(
+          `[UNIFIED BOT] 🏓 Self-ping successful at ${new Date().toLocaleTimeString()}`
+        );
+      } catch (error) {
+        console.error(`[UNIFIED BOT] ⚠️ Self-ping failed:`, error.message);
+      }
+    }, PING_INTERVAL);
+
+    console.log(
+      `[UNIFIED BOT] ⏰ Self-ping enabled (every 14 minutes to ${pingUrl})`
+    );
   }
 
   async loadMonitoredServers() {
@@ -301,7 +328,7 @@ class UnifiedBot {
   }
 
   async start() {
-    console.log("🚀 Starting Unified Bot System on Railway...\n");
+    console.log("🚀 Starting Unified Bot System...\n");
 
     // Setup event handlers
     this.setupMonitorBotHandlers();
@@ -327,16 +354,27 @@ class UnifiedBot {
       await this.loadMonitoredServers();
       await this.addAllServersToMonitoring();
 
+      // Start self-ping
+      this.startSelfPing();
+
       console.log("\n" + "=".repeat(50));
       console.log("✅ UNIFIED BOT SYSTEM FULLY OPERATIONAL!");
       console.log("=".repeat(50));
       console.log(`📊 Monitor Bot: ${this.monitorServers.size} servers`);
       console.log(`📊 Sender Bot: ${this.senderServers.size} servers`);
       console.log(`🎯 Target User ID: ${this.targetUserId}`);
+      console.log(`🌐 Web Interface: http://localhost:${this.port}`);
       console.log("=".repeat(50));
     } catch (error) {
       console.error("❌ FATAL: Failed to start bot:", error);
       throw error;
+    }
+  }
+
+  stop() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      console.log("[UNIFIED BOT] ⏹️ Self-ping stopped");
     }
   }
 }
@@ -349,11 +387,13 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", () => {
     console.log("\n🛑 Shutting down gracefully...");
+    bot.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
     console.log("\n🛑 Shutting down gracefully...");
+    bot.stop();
     process.exit(0);
   });
 }
