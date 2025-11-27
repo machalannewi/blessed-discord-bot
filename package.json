@@ -2,13 +2,7 @@
   "name": "discord-two-bot-monitor",
   "version": "1.0.0",
   "description": "Two-bot system for monitoring Discord servers and sending DM notifications",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "monitor": "node monitor-bot.js",
-    "sender": "node sender-bot.js",
-    "dev": "nodemon index.js"
-  },
+  "main": "index.js",
   "keywords": [
     "discord",
     "bot",
