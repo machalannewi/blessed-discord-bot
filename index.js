@@ -26,10 +26,10 @@ class UnifiedBot {
     this.railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
       : process.env.PUBLIC_DOMAIN
-      ? `https://${process.env.PUBLIC_DOMAIN}`
-      : process.env.RAILWAY_STATIC_URL
-      ? process.env.RAILWAY_STATIC_URL
-      : null;
+        ? `https://${process.env.PUBLIC_DOMAIN}`
+        : process.env.RAILWAY_STATIC_URL
+          ? process.env.RAILWAY_STATIC_URL
+          : null;
 
     this.monitorClient = new Client();
     this.senderClient = new Client();
@@ -39,7 +39,7 @@ class UnifiedBot {
 
     this.monitorDataFile = path.join(
       __dirname,
-      "monitored_servers_monitor.json"
+      "monitored_servers_monitor.json",
     );
     this.senderDataFile = path.join(__dirname, "monitored_servers_sender.json");
 
@@ -83,7 +83,7 @@ class UnifiedBot {
       console.log(
         `[UNIFIED BOT] 🚂 Railway URL: ${
           this.railwayUrl || "Not available (local mode)"
-        }`
+        }`,
       );
     });
   }
@@ -94,7 +94,7 @@ class UnifiedBot {
       const monitorData = await fs.readFile(this.monitorDataFile, "utf8");
       this.monitorServers = new Set(JSON.parse(monitorData));
       console.log(
-        `[MONITOR] ✅ Loaded ${this.monitorServers.size} monitored servers`
+        `[MONITOR] ✅ Loaded ${this.monitorServers.size} monitored servers`,
       );
     } catch (error) {
       if (error.code === "ENOENT") {
@@ -111,7 +111,7 @@ class UnifiedBot {
       const senderData = await fs.readFile(this.senderDataFile, "utf8");
       this.senderServers = new Set(JSON.parse(senderData));
       console.log(
-        `[SENDER] ✅ Loaded ${this.senderServers.size} monitored servers`
+        `[SENDER] ✅ Loaded ${this.senderServers.size} monitored servers`,
       );
     } catch (error) {
       if (error.code === "ENOENT") {
@@ -129,7 +129,7 @@ class UnifiedBot {
       const serversArray = Array.from(this.monitorServers);
       await fs.writeFile(
         this.monitorDataFile,
-        JSON.stringify(serversArray, null, 2)
+        JSON.stringify(serversArray, null, 2),
       );
     } catch (error) {
       console.error(`[MONITOR] ❌ Error saving servers:`, error);
@@ -141,7 +141,7 @@ class UnifiedBot {
       const serversArray = Array.from(this.senderServers);
       await fs.writeFile(
         this.senderDataFile,
-        JSON.stringify(serversArray, null, 2)
+        JSON.stringify(serversArray, null, 2),
       );
     } catch (error) {
       console.error(`[SENDER] ❌ Error saving servers:`, error);
@@ -161,7 +161,7 @@ class UnifiedBot {
       }
       await this.saveMonitoredServers();
       console.log(
-        `[MONITOR] 🎯 Monitoring ${this.monitorServers.size} servers`
+        `[MONITOR] 🎯 Monitoring ${this.monitorServers.size} servers`,
       );
     }
 
@@ -189,7 +189,7 @@ class UnifiedBot {
       await targetUser.send(message);
 
       console.log(
-        `[SENDER] ✅ Sent DM to ${targetUser.username} for: ${memberData.username} from ${memberData.guildName}`
+        `[SENDER] ✅ Sent DM to ${targetUser.username} for: ${memberData.username} from ${memberData.guildName}`,
       );
       return true;
     } catch (err) {
@@ -203,7 +203,7 @@ class UnifiedBot {
       console.log("=".repeat(50));
       console.log(`[MONITOR] ${colors.green}✅ Bot logged in!${colors.reset}`);
       console.log(
-        `[MONITOR] ${colors.green}👤 ${this.monitorClient.user.username}${colors.reset}`
+        `[MONITOR] ${colors.green}👤 ${this.monitorClient.user.username}${colors.reset}`,
       );
       console.log("=".repeat(50));
     });
@@ -225,18 +225,20 @@ class UnifiedBot {
           year: "numeric",
           month: "long",
           day: "numeric",
+          timeZone: "Africa/Lagos", // Your timezone
         }),
         time: now.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
+          timeZone: "Africa/Lagos", // Your timezone
         }),
         timestamp: now.toISOString(),
         source: "Monitor Bot",
       };
 
       console.log(
-        `[MONITOR] 🆕 New member: ${member.user.username} in ${member.guild.name}`
+        `[MONITOR] 🆕 New member: ${member.user.username} in ${member.guild.name}`,
       );
       await this.sendNotification(memberData);
     });
@@ -261,10 +263,10 @@ class UnifiedBot {
       console.log("=".repeat(50));
       console.log(`[SENDER] ${colors.green}✅ Bot logged in!${colors.reset}`);
       console.log(
-        `[SENDER] ${colors.green}👤 ${this.senderClient.user.username}${colors.reset}`
+        `[SENDER] ${colors.green}👤 ${this.senderClient.user.username}${colors.reset}`,
       );
       console.log(
-        `[SENDER] ${colors.cyan}🎯 Target User ID: ${this.targetUserId}${colors.reset}`
+        `[SENDER] ${colors.cyan}🎯 Target User ID: ${this.targetUserId}${colors.reset}`,
       );
       console.log("=".repeat(50));
     });
@@ -297,7 +299,7 @@ class UnifiedBot {
       };
 
       console.log(
-        `[SENDER] 🆕 New member in own server: ${member.user.username} in ${member.guild.name}`
+        `[SENDER] 🆕 New member in own server: ${member.user.username} in ${member.guild.name}`,
       );
       await this.sendNotification(memberData);
     });
@@ -351,7 +353,7 @@ class UnifiedBot {
       console.log(`📊 Sender Bot: ${this.senderServers.size} servers`);
       console.log(`🎯 Target User ID: ${this.targetUserId}`);
       console.log(
-        `🚂 Railway Environment: ${process.env.RAILWAY_ENVIRONMENT || "local"}`
+        `🚂 Railway Environment: ${process.env.RAILWAY_ENVIRONMENT || "local"}`,
       );
       console.log(`🌐 Public URL: ${this.railwayUrl || "localhost"}`);
       console.log("=".repeat(50));
